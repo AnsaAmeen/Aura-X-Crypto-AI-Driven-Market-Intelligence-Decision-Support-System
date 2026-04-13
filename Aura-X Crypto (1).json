@@ -1,0 +1,1153 @@
+{
+  "name": "Aura-X Crypto",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 3
+            }
+          ]
+        }
+      },
+      "id": "6f0fe23a-bd9a-4ba6-9d5f-2341d14caf0d",
+      "name": "01 — Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -224,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.coingecko.com/api/v3/simple/price",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "ids",
+              "value": "bitcoin,ethereum,solana,binancecoin,ripple"
+            },
+            {
+              "name": "vs_currencies",
+              "value": "usd"
+            },
+            {
+              "name": "include_24hr_change",
+              "value": "true"
+            },
+            {
+              "name": "include_market_cap",
+              "value": "true"
+            },
+            {
+              "name": "include_24hr_vol",
+              "value": "true"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b12f0d14-8d60-43fd-b857-337f770a4b9a",
+      "name": "02 — CoinGecko Prices",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        0,
+        -32
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.binance.com/api/v3/klines",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "symbol",
+              "value": "BTCUSDT"
+            },
+            {
+              "name": "interval",
+              "value": "1d"
+            },
+            {
+              "name": "limit",
+              "value": "60"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "0aef1441-59a7-4694-bbb7-ffd0cf370f03",
+      "name": "03 — Binance BTC OHLCV",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        0,
+        128
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.binance.com/api/v3/klines",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "symbol",
+              "value": "ETHUSDT"
+            },
+            {
+              "name": "interval",
+              "value": "1d"
+            },
+            {
+              "name": "limit",
+              "value": "60"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "08477c96-f6a3-4e39-93d5-3e373e803f27",
+      "name": "04 — Binance ETH OHLCV",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        0,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://cryptopanic.com/api/v1/posts/?auth_token=bcfaf301635a33ce50c2c97aa1d5a0fe927d7794&kind=news&filter=hot&public=true",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            },
+            {
+              "name": "User-Agent",
+              "value": "n8n"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a22d7b8f-d622-4737-86e6-7a86366b12c3",
+      "name": "05 — CryptoPanic News",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        0,
+        512
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.alternative.me/fng/?limit=1&format=json",
+        "options": {}
+      },
+      "id": "363c872a-e24c-4db0-bd69-adede95775b8",
+      "name": "06 — Fear & Greed Index",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        0,
+        704
+      ],
+      "retryOnFail": false
+    },
+    {
+      "parameters": {
+        "jsCode": "const btcKlines = $('03 — Binance BTC OHLCV').first().json;\nconst ethKlines = $('04 — Binance ETH OHLCV').first().json;\n\nfunction calcRSI(klines, period) {\n  const closes = klines.map(k => parseFloat(k[4]));\n  let gains = [], losses = [];\n  for (let i = 1; i < closes.length; i++) {\n    const d = closes[i] - closes[i-1];\n    gains.push(d > 0 ? d : 0);\n    losses.push(d < 0 ? Math.abs(d) : 0);\n  }\n  const ag = gains.slice(0, period).reduce((a,b)=>a+b,0)/period;\n  const al = losses.slice(0, period).reduce((a,b)=>a+b,0)/period;\n  if (al === 0) return 100;\n  return parseFloat((100 - 100/(1 + ag/al)).toFixed(2));\n}\n\nfunction calcEMA(prices, period) {\n  const k = 2/(period+1);\n  let ema = [prices[0]];\n  for (let i = 1; i < prices.length; i++) ema.push(prices[i]*k + ema[i-1]*(1-k));\n  return ema;\n}\n\nfunction calcMACD(klines) {\n  const closes = klines.map(k => parseFloat(k[4]));\n  const ema12 = calcEMA(closes, 12);\n  const ema26 = calcEMA(closes, 26);\n  const macdLine = ema12.map((v,i) => v - ema26[i]);\n  const signal = calcEMA(macdLine.slice(-9), 9);\n  const hist = macdLine[macdLine.length-1] - signal[signal.length-1];\n  return {\n    macd: parseFloat(macdLine[macdLine.length-1].toFixed(2)),\n    signal: parseFloat(signal[signal.length-1].toFixed(2)),\n    histogram: parseFloat(hist.toFixed(2)),\n    trend: hist > 0 ? 'BULLISH' : 'BEARISH'\n  };\n}\n\nfunction calcBB(klines) {\n  const closes = klines.map(k => parseFloat(k[4]));\n  const recent = closes.slice(-20);\n  const sma = recent.reduce((a,b)=>a+b,0)/20;\n  const std = Math.sqrt(recent.reduce((a,b)=>a+Math.pow(b-sma,2),0)/20);\n  const upper = sma + 2*std;\n  const lower = sma - 2*std;\n  const cur = closes[closes.length-1];\n  const pos = parseFloat(((cur-lower)/(upper-lower)*100).toFixed(1));\n  return { upper: upper.toFixed(2), middle: sma.toFixed(2), lower: lower.toFixed(2), position: pos };\n}\n\nfunction rsiLabel(rsi) {\n  if (rsi >= 70) return { emoji: '🔴', label: 'Overbought' };\n  if (rsi >= 60) return { emoji: '🟠', label: 'Bullish' };\n  if (rsi <= 30) return { emoji: '🟢', label: 'Oversold' };\n  if (rsi <= 40) return { emoji: '🔵', label: 'Bearish' };\n  return { emoji: '🟡', label: 'Neutral' };\n}\n\nconst btcRSI = calcRSI(btcKlines, 14);\nconst ethRSI = calcRSI(ethKlines, 14);\nconst btcMACD = calcMACD(btcKlines);\nconst ethMACD = calcMACD(ethKlines);\nconst btcBB = calcBB(btcKlines);\nconst ethBB = calcBB(ethKlines);\n\nreturn [{ json: {\n  btcRSI, ethRSI,\n  btcMACD, ethMACD,\n  btcBB, ethBB,\n  btcRSILabel: rsiLabel(btcRSI),\n  ethRSILabel: rsiLabel(ethRSI)\n}}];"
+      },
+      "id": "305138a9-5d61-40db-972f-94c3d4ec5ab0",
+      "name": "07 — TA Engine",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        160
+      ],
+      "alwaysOutputData": false,
+      "executeOnce": false,
+      "retryOnFail": false
+    },
+    {
+      "parameters": {
+        "jsCode": "const newsData = $('05 — CryptoPanic News').first().json;\nconst headlines = (newsData.results || []).slice(0, 10).map(n => n.title).join('\\n');\nreturn [{ json: { headlines } }];"
+      },
+      "id": "7a3f995e-dfc3-4b33-b07a-80bc16c093f4",
+      "name": "08 — Extract Headlines",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        288,
+        432
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer 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"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"gpt-4o-mini\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are a crypto news analyst. Return ONLY JSON.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"Analyze these headlines: {{ $json.headlines.replace(/[\\u0000-\\u001f\\u007f-\\u009f\"]/g, \" \") }}\"\n    }\n  ]\n}",
+        "options": {}
+      },
+      "id": "10dfc9d3-a00b-44f9-81d9-cea790946a8e",
+      "name": "09 — News Sentiment AI",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        544,
+        432
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json.choices[0].message.content;\ntry {\n  const clean = raw.replace(/```json|```/g, '').trim();\n  return [{ json: JSON.parse(clean) }];\n} catch(e) {\n  return [{ json: { overallTone: 'Neutral', keyThemes: [], riskEvents: [], opportunities: [], marketImpact: 'Low', summary: 'Parse error.' } }];\n}"
+      },
+      "id": "0fede6d3-2767-4d61-b4c4-eab4deae33bc",
+      "name": "10 — Parse News Sentiment",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        784,
+        432
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const DISCORD_TOKEN = 'YOUR_DISCORD_BOT_TOKEN';\nconst CHANNEL_IDS = ['YOUR_CHANNEL_ID_1', 'YOUR_CHANNEL_ID_2'];\n\nconst keywords = ['bullish','bearish','buy','sell','moon','dump','pump','BTC','ETH','SOL','long','short','breakout','support','resistance','ATH','dip'];\n\nlet allMessages = [];\n\nfor (const channelId of CHANNEL_IDS) {\n  try {\n    const res = await fetch(`https://discord.com/api/v10/channels/${channelId}/messages?limit=50`, {\n      headers: { 'Authorization': `Bot ${DISCORD_TOKEN}` }\n    });\n    if (!res.ok) throw new Error(`Status ${res.status}`);\n    const msgs = await res.json();\n    const filtered = msgs\n      .filter(m => keywords.some(kw => m.content.toLowerCase().includes(kw.toLowerCase())))\n      .map(m => ({ author: m.author.username, content: m.content, channelId }));\n    allMessages = allMessages.concat(filtered);\n  } catch(e) {\n    console.log(`Discord channel ${channelId} error: ${e.message}`);\n  }\n}\n\nconst combinedText = allMessages.slice(0, 30).map(m => `[${m.author}]: ${m.content}`).join('\\n') || 'No Discord messages found.';\n\nreturn [{ json: { combinedText, totalMessages: allMessages.length } }];"
+      },
+      "id": "28d5d757-7a0d-4c01-94ce-cc9a6fb5bc3e",
+      "name": "11 — Discord Scraper",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        288,
+        608
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer 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"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"gpt-4o-mini\",\n  \"max_tokens\": 600,\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are a crypto trader sentiment analyst. Analyze Discord messages and return ONLY a JSON object: overallSentiment (string: Bullish/Bearish/Neutral), sentimentScore (number -100 to 100), bullishSignals (array of 3 strings), bearishSignals (array of 3 strings), summary (string, 2 sentences). No markdown, ONLY JSON.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"Analyze these Discord trader messages:\\n{{ $('11 — Discord Scraper').first().json.combinedText }}\"\n    }\n  ]\n}",
+        "options": {}
+      },
+      "id": "4bfb42ef-fd07-4025-90cb-0dba4664c4ba",
+      "name": "12 — Discord Sentiment AI",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        544,
+        608
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json.choices[0].message.content;\ntry {\n  const clean = raw.replace(/```json|```/g, '').trim();\n  return [{ json: JSON.parse(clean) }];\n} catch(e) {\n  return [{ json: { overallSentiment: 'Neutral', sentimentScore: 0, bullishSignals: [], bearishSignals: [], summary: 'Parse error.' } }];\n}"
+      },
+      "id": "561c944a-12aa-41c5-aecd-d344ae76892f",
+      "name": "13 — Parse Discord Sentiment",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        784,
+        608
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Node 14 - Smart Prepare Embed Text (Fixing Node 06 Reference)\nlet fngValue = \"N/A\";\nlet fngClass = \"Neutral\";\n\n// Check if Node 06 exists and has data\ntry {\n  // Is line mein hum Node 06 ka data mangwa rahe hain\n  const fngNode = $('06 — Fear & Greed Index').first();\n  if (fngNode && fngNode.json) {\n    fngValue = fngNode.json.value || \"N/A\";\n    fngClass = fngNode.json.value_classification || \"Neutral\";\n  }\n} catch (e) {\n  // Agar Node 06 run nahi bhi hua, to code yahan rukay ga nahi\n  console.log(\"FNG Node not reached, using defaults.\");\n}\n\n// Baki nodes ka data (Safe way)\nconst prices = $('02 — CoinGecko Prices').first().json || {};\nconst news = $('10 — Parse News Sentiment').first().json || {};\n\n// Ye wo final text hai jo AI ko jayega\nconst finalText = `\nCURRENT PRICES: BTC $${prices.bitcoin?.usd || '0'}, ETH $${prices.ethereum?.usd || '0'}\nFEAR & GREED: ${fngValue} (${fngClass})\nLATEST NEWS: ${news.headlines?.[0]?.title || 'No news available'}\n`.trim();\n\nreturn {\n  text: finalText\n};"
+      },
+      "id": "e9003f02-e8a1-455e-8f40-23e3ee13e460",
+      "name": "14 — Prepare Embed Text",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1136,
+        144
+      ],
+      "executeOnce": false
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/embeddings",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer "
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"text-embedding-3-small\",\n  \"input\": \"{{ $('14 — Prepare Embed Text').first().json.textToEmbed }}\"\n}",
+        "options": {}
+      },
+      "id": "91a3a82b-3938-45bc-a3ac-f1897192c7ce",
+      "name": "15 — OpenAI Embeddings",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1264,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://crypto-bp234nw.svc.aped-4627-b74a.pinecone.io/vectors/upsert",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Api-Key",
+              "value": "pcsk_6hEMgm_3Mjb2PGo74XRZKUMLQgoyNaWauLPhyNT6kPiHtmTMv6hZsyg7QUUp7gF4DkAAeB"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"vectors\": [\n    {\n      \"id\": \"signal-{{ $now.toFormat('yyyyMMddHHmmss') }}\",\n      \"values\": {{ JSON.stringify($json.data[0].embedding) }},\n      \"metadata\": {\n        \"newsTone\": \"{{ $node['10 — Parse News Sentiment']?.json?.overallTone || 'Neutral' }}\",\n        \"market_signals\": \"crypto_intel\"\n      }\n    }\n  ],\n  \"namespace\": \"market_signals\"\n}",
+        "options": {}
+      },
+      "id": "f091631f-96e3-4c1a-bdae-8e21b57cac09",
+      "name": "16 — Pinecone Store",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1440,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://crypto-bp234nw.svc.aped-4627-b74a.pinecone.io/query",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Api-Key",
+              "value": "pcsk_6hEMgm_3Mjb2PGo74XRZKUMLQgoyNaWauLPhyNT6kPiHtmTMv6hZsyg7QUUp7gF4DkAAeB            "
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"vector\": {{ JSON.stringify($json.data[0].embedding) }},\n  \"topK\": 3,\n  \"includeMetadata\": true,\n  \"includeValues\": false\n}",
+        "options": {}
+      },
+      "id": "88fbd1f1-1210-49bd-b4ba-4a5ae76a6981",
+      "name": "17 — Pinecone Query",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1472,
+        624
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const matches = $input.first().json.matches || [];\nconst historicalContext = matches.length > 0\n  ? matches.map(m => {\n      const meta = m.metadata || {};\n      return `Date: ${(meta.timestamp || '').split('T')[0]} | BTC: $${meta.btcPrice} | RSI: ${meta.btcRSI} | Discord: ${meta.discordSentiment} | News: ${meta.newsTone}`;\n    }).join('\\n')\n  : 'No historical data yet — this is the first run.';\n\nreturn [{ json: { historicalContext } }];"
+      },
+      "id": "af3cd428-cba4-4ed1-af76-d1797e3f6a43",
+      "name": "18 — Format History",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1600,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Node 19 - Safe Prompt Builder\ntry {\n    // In names ko apne workflow ke nodes se match karein\n    const taNode = $node[\"07 — TA Engine\"] || $node[\"08 — TA Engine\"];\n    const discordNode = $node[\"13 — Discord Sentiment\"] || $node[\"14 — Discord Sentiment\"];\n    const pricesNode = $node[\"02 — CoinGecko Prices\"];\n    const newsNode = $node[\"10 — Parse News Sentiment\"];\n\n    const prompt = `\n    Generate a crypto intelligence report based on:\n\n    === PRICES ===\n    BTC: $${pricesNode.json.bitcoin.usd}\n    ETH: $${pricesNode.json.ethereum.usd}\n\n    === TECHNICALS ===\n    - BTC RSI: ${taNode.json.btcRSI || 'N/A'}\n    - ETH RSI: ${taNode.json.ethRSI || 'N/A'}\n    - Trend: ${taNode.json.btcMACD?.trend || 'Neutral'}\n\n    === DISCORD SENTIMENT ===\n    - Summary: ${discordNode.json.summary || 'No recent activity.'}\n\n    === NEWS ===\n    ${newsNode.json.headlines?.map(h => h.title).join(\", \") || 'No news.'}\n\n    Write a sharp, professional report. Focus on RSI status.\n    `;\n\n    return { prompt: prompt };\n\n} catch (error) {\n    return { \n        prompt: \"Data collection partial. Focus on available price and news data.\",\n        error: error.message \n    };\n}"
+      },
+      "id": "857fc649-b092-49eb-93eb-3f5e9abea7d3",
+      "name": "19 — Build Orchestrator Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1904,
+        432
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer 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"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"gpt-4o\",\n  \"max_tokens\": 500,\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are Project X, an elite crypto fund manager. STRICT RULES: 1. Provide a SHARP & BOLD 'Strategic Action Plan' for BTC, ETH, and SOL. 2. For each coin, state a clear Action (BUY, SELL, or HOLD) followed by one short reason based on RSI/Price. 3. NEVER mention 'undefined' or missing data. 4. Use bold headers for each coin. 5. End with a 'Final Bias' (Bullish/Bearish). Keep the total response under 100 words.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": {{ JSON.stringify($node[\"19 — Build Orchestrator Prompt\"].json.prompt) }}\n    }\n  ]\n}",
+        "options": {}
+      },
+      "id": "4bdccf69-baf3-40ad-9359-1ed23e638ed6",
+      "name": "20 — Master AI Orchestrator",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2032,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "if ($itemIndex > 0) return null;\n\nconst aiReport = $node[\"20 — Master AI Orchestrator\"]?.json?.choices?.[0]?.message?.content || \"Signal Pending...\";\nconst prices = $node[\"02 — CoinGecko Prices\"]?.json || {};\nconst fng = $node[\"06 — Fear & Greed Index\"]?.json?.data?.[0] || { value: '11', value_classification: 'Extreme Fear' };\n\n// Helper for Price & Arrows\nconst getCoinRow = (coin, name) => {\n    const p = prices[coin];\n    if (!p) return \"\";\n    const change = p.usd_24h_change || 0;\n    const arrow = change > 0 ? \"🟢\" : \"🔴\";\n    const status = change > 0 ? \"↗️\" : \"↘️\";\n    return `• *${name}:* \\`$${p.usd.toLocaleString()}\\` ${arrow} (${change.toFixed(2)}% ${status})`;\n};\n\nconst report = `\n🚀 *Aura-X Crypto*\n📅 ${new Date().toUTCString()}\n━━━━━━━━━━━━━━━━━━\n\n💰 *TOP ASSETS (24H STATUS)*\n${getCoinRow('bitcoin', 'BTC')}\n${getCoinRow('ethereum', 'ETH')}\n${getCoinRow('solana', 'SOL')}\n\n📊 *MARKET SENTIMENT*\n• *Fear & Greed:* \\`${fng.value}\\` (*${fng.value_classification}*)\n• *Context:* ${fng.value < 20 ? '🔥 BUY THE DIP' : '⚖️ HOLD/WAIT'}\n\n🤖 *STRATEGIC ACTION PLAN*\n${aiReport}\n\n━━━━━━━━━━━━━━━━━━\n_Signal System | Aura-X Crypto\n`;\n\nreturn { fullMessage: report };"
+      },
+      "id": "662251db-eea5-46f4-8a02-ca0536c425ab",
+      "name": "21 — Format Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2272,
+        288
+      ],
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "chatId": "6823983918",
+        "text": "={{ $json.fullMessage }}",
+        "additionalFields": {
+          "disable_web_page_preview": true,
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "8bb02c8e-15f7-409d-9497-443c2d2810b9",
+      "name": "22 — Telegram Send Report",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2512,
+        144
+      ],
+      "webhookId": "83861b00-f619-4d55-8783-222bd9b9bc5d",
+      "executeOnce": true,
+      "credentials": {
+        "telegramApi": {
+          "id": "sS1Y2bBIZczbfq0g",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "has-part2",
+              "leftValue": "={{ $json.part2 }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "ac74b36b-70bb-45b9-a8e3-ef3a85002885",
+      "name": "23 — Has Part 2?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2512,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "6823983918",
+        "text": "={{ $json.part2 }}\n\n_Project X — End of Report_",
+        "additionalFields": {
+          "disable_web_page_preview": true,
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "162311ad-c561-426c-9da0-4dca652fabc4",
+      "name": "24 — Telegram Part 2",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2832,
+        272
+      ],
+      "webhookId": "5f1b2484-f2b9-4307-addc-6ddd3fb3850e",
+      "credentials": {
+        "telegramApi": {
+          "id": "sS1Y2bBIZczbfq0g",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "rsi-alert",
+              "leftValue": "={{ $json.btcRSI }}",
+              "rightValue": 72,
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "id": "f5a71c5e-5202-476b-b072-4fcb61d61b0f",
+      "name": "25 — RSI Alert Check",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2512,
+        496
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "6823983918",
+        "text": "⚠️ *RSI ALERT*\n\nBTC RSI: {{ $json.btcRSI }} — Overbought zone!\nReview positions. Possible reversal ahead.\n\n_Project X Alert_",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "5422bf58-975e-4f77-a3d8-86d699401d81",
+      "name": "26 — Telegram RSI Alert",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2832,
+        464
+      ],
+      "webhookId": "8c3ddd23-2554-4841-86db-9a2d752b8747",
+      "credentials": {
+        "telegramApi": {
+          "id": "sS1Y2bBIZczbfq0g",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "sentiment-alert",
+              "leftValue": "={{ $json.discordScore }}",
+              "rightValue": -60,
+              "operator": {
+                "type": "number",
+                "operation": "lte"
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "id": "0c5e094b-b130-4da4-91d6-1a3c317c2f27",
+      "name": "27 — Sentiment Alert Check",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2496,
+        656
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "6823983918",
+        "text": "😱 *SENTIMENT ALERT*\n\nDiscord score crashed to {{ $json.discordScore }}/100!\nExtreme fear detected. Possible local bottom OR panic selling.\n\nDo NOT make impulsive decisions.\n\n_Project X Sentiment Monitor_",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "89d06908-3093-4473-a951-8f5ddd913471",
+      "name": "28 — Telegram Sentiment Alert",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2832,
+        640
+      ],
+      "webhookId": "cbefdebb-9e7a-41a5-83f3-7741be625ca4",
+      "credentials": {
+        "telegramApi": {
+          "id": "sS1Y2bBIZczbfq0g",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        240,
+        160
+      ],
+      "id": "7c5d9cfb-d054-42e6-9eaf-a2deff541600",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "numberInputs": 5,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        960,
+        192
+      ],
+      "id": "2f90a32f-934c-4e9d-b792-f10272337ae2",
+      "name": "Merge1"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.limit",
+      "typeVersion": 1,
+      "position": [
+        2160,
+        608
+      ],
+      "id": "b8442843-5204-47e2-bfa0-9bafa3fa3acb",
+      "name": "Limit"
+    },
+    {
+      "parameters": {
+        "content": "**🟦 ZONE 1: RAW DATA INGESTION**\n**Purpose:** Gathering the raw telemetry from multiple market sources.\n\n**CRON TRIGGER:**  Automates the entire system for 24/7 hands-free monitoring.\n\n**PRICE API:** Live USD tracking and 24h percentage changes for BTC, ETH, and SOL.\n\n**CANDLESTICK FEED:** Raw OHLCV data from Binance is needed for mathematical calculations.\n\n**SENTIMENT DATA:** Fetching news headlines (CryptoPanic) and the emotional pulse (Fear & Greed Index).",
+        "height": 1104,
+        "width": 944,
+        "color": 3
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -768,
+        -192
+      ],
+      "typeVersion": 1,
+      "id": "dbe4a746-4b33-40d6-a850-1cda2aa8b854",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "content": "**🟨 ZONE 2: SOCIAL & NEWS SENTIMENT ANALYSIS**\n**Purpose:** Using AI to turn messy text into a numerical sentiment score.\n\n**RAW SCRAPERS:**  Isolating headlines from News and scraping real-time messages from Discord.\n\n**SENTIMENT AI (LLM):** GPT scans the text to identify Bullish/Bearish bias.\n\n**JSON PARSERS:** Cleaning AI responses to ensure only structured data enters the core.",
+        "height": 1104,
+        "width": 640,
+        "color": 3
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        256,
+        -192
+      ],
+      "typeVersion": 1,
+      "id": "99da5363-0da6-41be-b317-403f84e80b28",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "content": "**🟪 ZONE 3: TECHNICAL ENGINE & MEMORY (RAG)**\n**Purpose:** Calculating indicators and managing the \"Long-term Memory\".\n\n**TA ENGINE:** Custom JS code to calculate RSI, MACD, and Bollinger Bands.\n\n**EMBEDDING VECTORIZER:**  Converts market conditions into mathematical vectors.\n\n**PINECONE VECTOR DB:** Stores today's data and queries the database for past similar market setups.\n\n**CONTEXT BUILDER:** Merges historical \"Memory\" with live data for RAG-based analysis.",
+        "height": 1104,
+        "width": 720,
+        "color": 3
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        1088,
+        -192
+      ],
+      "typeVersion": 1,
+      "id": "4ac94682-3792-47e3-b870-99939c0f1f8c",
+      "name": "Sticky Note2"
+    },
+    {
+      "parameters": {
+        "content": "**🟩 ZONE 4: THE STRATEGIC ORCHESTRATOR**\n**Purpose:** The central brain where all data converges to a final decision.\n\n**MASTER PROMPT BUILDER:** Combines Prices + Technicals + News + Discord + Memory into one prompt.\n\n**GPT-4o ANALYST:** The elite engine that decides on a BUY/SELL/HOLD action plan.\n\n**REPORT STYLER:** Formats raw AI logic into a bold, executive Telegram summary.",
+        "height": 1104,
+        "width": 576,
+        "color": 3
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        1840,
+        -192
+      ],
+      "typeVersion": 1,
+      "id": "b2f779bc-ca73-45d3-98a1-b9f657bfb5bf",
+      "name": "Sticky Note3"
+    },
+    {
+      "parameters": {
+        "content": "**🟧 ZONE 5: DELIVERY & SMART ALERTS**\n**Purpose:**  Dispatching intelligence and managing conditional notifications.\n\n**TELEGRAM DISPATCH: Sending the main morning report and follow-up data.\n\n**LOGIC GATES:** Filters that check: \"Is the RSI actually extreme?\" or \"Has sentiment shifted significantly?\"\n\n**INSTANT ALERTS :** Priority notifications that hit your phone only when a high-probability trade setup exists",
+        "height": 1104,
+        "width": 672,
+        "color": 3
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        2448,
+        -192
+      ],
+      "typeVersion": 1,
+      "id": "5a978a83-d62e-45f8-80c2-8f50a593d297",
+      "name": "Sticky Note4"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "01 — Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "02 — CoinGecko Prices",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "03 — Binance BTC OHLCV",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "04 — Binance ETH OHLCV",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "05 — CryptoPanic News",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "06 — Fear & Greed Index",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "11 — Discord Scraper",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "03 — Binance BTC OHLCV": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "04 — Binance ETH OHLCV": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "05 — CryptoPanic News": {
+      "main": [
+        [
+          {
+            "node": "08 — Extract Headlines",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "08 — Extract Headlines": {
+      "main": [
+        [
+          {
+            "node": "09 — News Sentiment AI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "09 — News Sentiment AI": {
+      "main": [
+        [
+          {
+            "node": "10 — Parse News Sentiment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "11 — Discord Scraper": {
+      "main": [
+        [
+          {
+            "node": "12 — Discord Sentiment AI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "12 — Discord Sentiment AI": {
+      "main": [
+        [
+          {
+            "node": "13 — Parse Discord Sentiment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "07 — TA Engine": {
+      "main": [
+        [
+          {
+            "node": "Merge1",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "10 — Parse News Sentiment": {
+      "main": [
+        [
+          {
+            "node": "Merge1",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "13 — Parse Discord Sentiment": {
+      "main": [
+        [
+          {
+            "node": "Merge1",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "14 — Prepare Embed Text": {
+      "main": [
+        [
+          {
+            "node": "15 — OpenAI Embeddings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "15 — OpenAI Embeddings": {
+      "main": [
+        [
+          {
+            "node": "16 — Pinecone Store",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "17 — Pinecone Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "16 — Pinecone Store": {
+      "main": [
+        [
+          {
+            "node": "19 — Build Orchestrator Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "17 — Pinecone Query": {
+      "main": [
+        [
+          {
+            "node": "18 — Format History",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "18 — Format History": {
+      "main": [
+        [
+          {
+            "node": "19 — Build Orchestrator Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "19 — Build Orchestrator Prompt": {
+      "main": [
+        [
+          {
+            "node": "20 — Master AI Orchestrator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "20 — Master AI Orchestrator": {
+      "main": [
+        [
+          {
+            "node": "Limit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "21 — Format Report": {
+      "main": [
+        [
+          {
+            "node": "22 — Telegram Send Report",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "23 — Has Part 2?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "25 — RSI Alert Check",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "27 — Sentiment Alert Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "23 — Has Part 2?": {
+      "main": [
+        [
+          {
+            "node": "24 — Telegram Part 2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "25 — RSI Alert Check": {
+      "main": [
+        [
+          {
+            "node": "26 — Telegram RSI Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "27 — Sentiment Alert Check": {
+      "main": [
+        [
+          {
+            "node": "28 — Telegram Sentiment Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "07 — TA Engine",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge1": {
+      "main": [
+        [
+          {
+            "node": "14 — Prepare Embed Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "02 — CoinGecko Prices": {
+      "main": [
+        [
+          {
+            "node": "Merge1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "06 — Fear & Greed Index": {
+      "main": [
+        [
+          {
+            "node": "Merge1",
+            "type": "main",
+            "index": 4
+          }
+        ]
+      ]
+    },
+    "Limit": {
+      "main": [
+        [
+          {
+            "node": "21 — Format Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "66c2aeee-0f25-4cde-9edf-80b370ed3591",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "c98e194401da73116652d24579791b1c6b286a31557763ab59dbf534bdf40ca5"
+  },
+  "id": "Oa8gQ0E5jnlFjyNF",
+  "tags": [
+    {
+      "updatedAt": "2026-04-02T08:35:58.032Z",
+      "createdAt": "2026-04-02T08:35:58.032Z",
+      "id": "oWahInXMnq3sxe7N",
+      "name": "Project X"
+    }
+  ]
+}
