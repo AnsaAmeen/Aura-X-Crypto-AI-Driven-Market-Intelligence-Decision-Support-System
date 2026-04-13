@@ -18,8 +18,8 @@ The system bridges the gap between fragmented market data and execution strategy
 
 ### 🖼️ Workflow Architecture
 
-* **Workflow Diagram:** `[Link to Image]`
-* **Telegram Intelligence Report:** `[Link to Image]`
+* **Workflow Diagram:** `https://github.com/AnsaAmeen/Aura-X-Crypto-AI-Driven-Market-Intelligence-Decision-Support-System/blob/main/Aura%20X%20Crypto%20(2).png`
+* **Telegram Intelligence Report:** `https://github.com/AnsaAmeen/Aura-X-Crypto-AI-Driven-Market-Intelligence-Decision-Support-System/blob/main/Aura%20x%20crypto%20output%20message.jpeg`
 * **Pinecone Database Logs:** `[Link to Image]`
 
 ---
