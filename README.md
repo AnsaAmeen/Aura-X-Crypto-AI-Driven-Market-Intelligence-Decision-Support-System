@@ -3,12 +3,12 @@ An Autonomous AI-Powered Crypto Sentinel & Strategic Action Engine
 The Aura-X Crypto is a high-performance, production-ready automation framework designed to navigate the volatility of digital assets. It transforms raw market telemetry (Price, Technical Indicators, Social Sentiment) into institutional-grade strategic action plans—enabling data-driven trading decisions and early trend detection through advanced AI orchestration.
 
 📽️ Project Overview & Logic
-The automation is implemented using n8n with a sophisticated 28-node modular architecture. Each stage of the workflow is clearly separated to improve readability and future extensibility. The system bridges the gap between fragmented market data and execution strategy by utilizing Retrieval-Augmented Generation (RAG)—connecting a live data pipeline to a Vector Database to learn from historical market patterns.
+The automation is implemented using n8n with a sophisticated 28-node modular architecture. Each stage of the workflow is clearly separated to improve readability, debugging, and future extensibility. The system bridges the gap between fragmented market data and execution strategy by utilizing Retrieval-Augmented Generation (RAG)—connecting a live data pipeline to a Vector Database (Pinecone) so the AI learns from historical market patterns.
 
 🖼️ Workflow Architecture
-[Link to your Workflow Image]
-[Link to your Telegram Output Image]
-[Link to your Pinecone Dashboard Image]
+[Yahan aapne n8n Workflow ki image ka link dena hai]
+[Yahan Telegram Output screenshot ka link dena hai]
+[Yahan Pinecone/Data logs ka link dena hai]
 
 💎 Core Features
 🤖 AI Strategic Orchestration
